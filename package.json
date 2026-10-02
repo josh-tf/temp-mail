@@ -1,0 +1,27 @@
+{
+  "name": "temp-mail",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -C web build",
+    "check": "pnpm lint && pnpm format:check && tsc --noEmit && pnpm -C web exec tsc -b && node --test --experimental-strip-types --no-warnings src/*.test.ts",
+    "deploy": "pnpm build && ${WRANGLER:-wrangler} deploy",
+    "dev": "pnpm build && ${WRANGLER:-wrangler} dev",
+    "types": "${WRANGLER:-wrangler} types --strict-vars=false",
+    "db:migrate:local": "${WRANGLER:-wrangler} d1 migrations apply DB --local",
+    "lint": "oxlint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "hono": "^4.13.12",
+    "postal-mime": "^2.4.4"
+  },
+  "devDependencies": {
+    "oxlint": "^1.86.0",
+    "prettier": "^3.9.9",
+    "typescript": "^5.9.3",
+    "wrangler": "4.142.0"
+  },
+  "packageManager": "pnpm@9.1.0"
+}

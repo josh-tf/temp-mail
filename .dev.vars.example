@@ -1,0 +1,2 @@
+DISCORD_CLIENT_SECRET=dev
+SESSION_SECRET=dev-only-secret

@@ -1,0 +1,47 @@
+// Copy to wrangler.jsonc (gitignored) and fill in your own values.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "temp-mail",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-30",
+  "account_id": "<CLOUDFLARE_ACCOUNT_ID>",
+  "workers_dev": false,
+  "routes": [{ "pattern": "mail.example.com", "custom_domain": true }],
+  // Catch-all for the apex: every *@example.com goes to this Worker's email()
+  // handler, which keeps mail for known aliases and rejects the rest.
+  "addresses": ["*@example.com"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "temp-mail",
+      "database_id": "<D1_DATABASE_ID>",
+      "migrations_dir": "migrations",
+    },
+  ],
+  // Raw .eml per message; D1 holds only the listing fields.
+  "r2_buckets": [{ "binding": "MAIL", "bucket_name": "temp-mail" }],
+  // Daily retention sweep.
+  "triggers": { "crons": ["17 3 * * *"] },
+  "vars": {
+    "DOMAIN": "example.com",
+    "RETENTION_DAYS": "30",
+    // Comma-separated Discord user IDs that are always admin (bootstrap).
+    "ADMIN_IDS": "<YOUR_DISCORD_USER_ID>",
+    "DISCORD_CLIENT_ID": "<DISCORD_APPLICATION_ID>",
+  },
+  // Secrets: DISCORD_CLIENT_SECRET, SESSION_SECRET
+  // React SPA (web/). The Worker only runs for the API and OAuth routes;
+  // everything else is a static asset or the SPA's index.html.
+  "assets": {
+    "directory": "./web/dist",
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/auth/*", "/callback"],
+  },
+  "observability": { "enabled": true },
+  // Local `wrangler dev` only: without this the Worker sees every request as
+  // https://mail.example.com (the route), so the Origin check refuses the browser's
+  // http://localhost:8787 and OAuth redirects to production. Chrome accepts
+  // Secure/__Host- cookies on http://localhost, so nothing is weakened.
+  "dev": { "ip": "127.0.0.1", "port": 8787, "host": "localhost:8787", "upstream_protocol": "http" },
+}

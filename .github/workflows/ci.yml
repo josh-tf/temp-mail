@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -C web install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
+  deploy:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+      # Migrations are additive; applying first means new code never meets an old schema.
+      # The real config (account, domain, resource IDs) is a repo secret, not committed.
+      - name: Write Wrangler config
+        env:
+          WRANGLER_JSONC: ${{ secrets.WRANGLER_JSONC }}
+        run: |
+          test -n "$WRANGLER_JSONC" || { echo "WRANGLER_JSONC secret is not set"; exit 1; }
+          printf '%s' "$WRANGLER_JSONC" > wrangler.jsonc
+          # Wrangler echoes bindings and vars on deploy; mask every config value so public logs stay clean.
+          node -e '
+            const src = require("fs").readFileSync("wrangler.jsonc", "utf8");
+            for (const [, v] of src.matchAll(/:\s*"([^"]{4,})"/g)) console.log("::add-mask::" + v);
+            for (const v of src.match(/[\w.-]*\.[a-z]{2,}\b/gi) ?? []) console.log("::add-mask::" + v);
+          '
+      - run: pnpm exec wrangler d1 migrations apply DB --remote
+      - run: pnpm exec wrangler deploy
